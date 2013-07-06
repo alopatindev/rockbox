@@ -46,7 +46,7 @@ http://www.audioscrobbler.net/wiki/Portable_Player_Logging
 #define SCROBBLER_VERSION "1.1"
 
 /* increment this on any code change that effects output */
-#define SCROBBLER_REVISION " $Revision$"
+#define SCROBBLER_REVISION " 1"
 
 #define SCROBBLER_MAX_CACHE 32
 /* longest entry I've had is 323, add a safety margin */
@@ -210,11 +210,17 @@ static void add_to_cache(unsigned long play_length)
                 scrobbler_entry.mb_track_id?scrobbler_entry.mb_track_id:"");
     }
 
-    if ( ret >= SCROBBLER_CACHE_LEN )
+    if ( rating == 'S' )
+    {
+        logf("SCROBBLER: skipped a song; won't add to cache");
+    }
+    else if ( ret >= SCROBBLER_CACHE_LEN )
     {
         logf("SCROBBLER: entry too long:");
         logf("SCROBBLER: %s", scrobbler_entry.path);
-    } else {
+    }
+    else
+    {
         cache_pos++;
         register_storage_idle_func(scrobbler_flush_callback);
     }
