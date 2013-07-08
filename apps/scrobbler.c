@@ -170,6 +170,96 @@ static void scrobbler_flush_callback(void *data)
         write_cache();
 }
 
+static int fgetc(int fd)
+{
+    unsigned char cb;
+    if (read(fd, &cb, 1) != 1)
+        return EOF;
+    return cb;
+}
+
+static void read_last_line(char* last_line, size_t size)
+{
+    char scrobbler_file[MAX_PATH];
+    get_scrobbler_filename(scrobbler_file, MAX_PATH);
+    static char buf[SCROBBLER_CACHE_LEN];
+    int fd;
+    size_t offset = 0;
+    int c;
+
+    if(file_exists(scrobbler_file))
+    {
+        fd = open(scrobbler_file, O_RDONLY, 0666);
+        if(fd >= 0)
+        {
+            offset = -1;
+            lseek(fd, offset, SEEK_END);
+            c = fgetc(fd);
+            if (c == '\n')
+                offset = -2;
+            c = 0;
+            buf[size-1] = '\0';
+            size_t i = size-2;
+            while (c != '\n')
+            {
+                int ret = lseek(fd, offset, SEEK_END);
+                if (ret != 0)
+                    break;
+                c = fgetc(fd);
+                offset--;
+                buf[i] = (char)c;
+                i--;
+            }
+            strcpy(last_line, buf+i+2);
+
+            close(fd);
+        }
+    }
+}
+
+static bool scrobbler_entry_match(struct mp3entry* entry, char* last_line, size_t size)
+{
+    static char artist[SCROBBLER_CACHE_LEN];
+    static char album[SCROBBLER_CACHE_LEN];
+    static char title[SCROBBLER_CACHE_LEN];
+    //sscanf(last_line, "%s\t%s\t%s\t", artist, album, title);
+    size_t i = 0;
+    size_t offset = 0;
+    while (last_line[offset] != '\t' && last_line[offset] != '\0')
+    {
+        artist[i++] = last_line[offset];
+        offset++;
+    }
+    artist[i] = '\0';
+    offset++;
+
+    i = 0;
+    while (last_line[offset] != '\t' && last_line[offset] != '\0')
+    {
+        album[i++] = last_line[offset];
+        offset++;
+    }
+    album[i] = '\0';
+    offset++;
+
+    i = 0;
+    while (last_line[offset] != '\t' && last_line[offset] != '\0')
+    {
+        title[i++] = last_line[offset];
+        offset++;
+    }
+    title[i] = '\0';
+
+    if (strncmp(entry->artist, artist, size) != 0 ||
+        strncmp(entry->album, album, size) != 0 ||
+        strncmp(entry->title, title, size) != 0)
+    {
+        return false;
+    }
+
+    return true;
+}
+
 static void add_to_cache(unsigned long play_length)
 {
     if ( cache_pos >= SCROBBLER_MAX_CACHE )
@@ -209,6 +299,11 @@ static void add_to_cache(unsigned long play_length)
                 (long)timestamp,
                 scrobbler_entry.mb_track_id?scrobbler_entry.mb_track_id:"");
     }
+
+    static char last_line[SCROBBLER_CACHE_LEN];
+    read_last_line(last_line, SCROBBLER_CACHE_LEN);
+    if (scrobbler_entry_match(&scrobbler_entry, last_line, SCROBBLER_CACHE_LEN))
+        rating = 'S';
 
     if ( rating == 'S' )
     {
